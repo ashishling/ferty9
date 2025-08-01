@@ -41,10 +41,10 @@ export async function getAudioDuration(file: File): Promise<number> {
 /**
  * Check if a file needs to be split based on duration
  * @param file - The audio file to check
- * @param maxDurationMinutes - Maximum duration in minutes before splitting (default: 3)
+ * @param maxDurationMinutes - Maximum duration in minutes before splitting (default: 2.67 minutes)
  * @returns Promise<boolean> - Whether the file needs splitting
  */
-export async function shouldSplitFileByDuration(file: File, maxDurationMinutes: number = 3): Promise<boolean> {
+export async function shouldSplitFileByDuration(file: File, maxDurationMinutes: number = 2.67): Promise<boolean> {
   try {
     const durationMs = await getAudioDuration(file);
     return durationMs > maxDurationMinutes * 60 * 1000;
@@ -58,12 +58,12 @@ export async function shouldSplitFileByDuration(file: File, maxDurationMinutes: 
 /**
  * Split an audio file into smaller chunks for processing
  * @param file - The audio file to split
- * @param chunkDurationMs - Duration of each chunk in milliseconds (default: 3 minutes)
+ * @param chunkDurationMs - Duration of each chunk in milliseconds (default: 2 minutes 40 seconds)
  * @returns Promise<AudioChunk[]> - Array of audio chunks
  */
 export async function splitAudioFile(
   file: File, 
-  chunkDurationMs: number = 3 * 60 * 1000 // 3 minutes
+  chunkDurationMs: number = 2.67 * 60 * 1000 // 2 minutes 40 seconds
 ): Promise<AudioChunk[]> {
   return new Promise((resolve, reject) => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();

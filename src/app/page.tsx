@@ -37,24 +37,6 @@ export default function HomePage() {
       }
       
       setFiles(prevFiles => [...prevFiles, ...newFiles]);
-      
-      // Check for long files and show warning
-      const longFiles = [];
-      for (const file of selectedFiles) {
-        try {
-          const needsSplitting = await shouldSplitFileByDuration(file, 3);
-          if (needsSplitting) {
-            longFiles.push(file.name);
-          }
-        } catch (error) {
-          console.error('Error checking duration for file:', file.name, error);
-        }
-      }
-      
-      if (longFiles.length > 0) {
-        const fileNames = longFiles.join(', ');
-        alert(`Note: The following files are longer than 3 minutes and will be automatically split into smaller chunks: ${fileNames}\n\nThis will improve reliability and prevent timeouts.`);
-      }
     }
   };
 
@@ -100,13 +82,13 @@ export default function HomePage() {
 
       try {
         // Check if file needs to be split based on duration
-        const needsSplitting = await shouldSplitFileByDuration(file, 3);
+        const needsSplitting = await shouldSplitFileByDuration(file, 2.67);
         
         if (needsSplitting) {
           console.log(`Splitting long file: ${file.name} (${Math.round((files[i].duration || 0) / 1000 / 60)} minutes)`);
           
-          // Split the audio file into 3-minute chunks
-          const chunks = await splitAudioFile(file, 3 * 60 * 1000); // 3 minutes per chunk
+          // Split the audio file into 2-minute 40-second chunks
+          const chunks = await splitAudioFile(file, 2.67 * 60 * 1000); // 2 minutes 40 seconds per chunk
           updateFileStatus(i, 'transcribing', undefined, chunks.length, 0);
           
           const transcriptions: TranscriptionResult[] = [];
@@ -260,7 +242,7 @@ export default function HomePage() {
                     <div className="text-sm font-medium truncate">{fileStatus.file.name}</div>
                     <div className="text-xs text-gray-500">
                       {formatFileSize(fileStatus.file.size)}
-                      {fileStatus.duration && fileStatus.duration > 3 * 60 * 1000 && (
+                      {fileStatus.duration && fileStatus.duration > 2.67 * 60 * 1000 && (
                         <span className="ml-2 text-orange-500">⚠️ Long file ({Math.round(fileStatus.duration / 1000 / 60)}min)</span>
                       )}
                     </div>
