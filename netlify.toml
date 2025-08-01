@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[functions]
+  directory = ".next/serverless"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[functions."api-transcribe"]
+  timeout = 300
+  max_body_size = "50mb"
+
+[build.environment]
+  NODE_VERSION = "18" 
