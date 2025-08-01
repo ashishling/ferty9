@@ -2,7 +2,7 @@
 
 import { useState, useRef, ChangeEvent } from 'react';
 import axios from 'axios';
-import { shouldSplitFile, formatFileSize, splitAudioFile, mergeTranscriptions, AudioChunk, TranscriptionResult } from '../utils/audioUtils';
+import { shouldSplitFileByDuration, formatFileSize, splitAudioFile, mergeTranscriptions, AudioChunk, TranscriptionResult, getAudioDuration } from '../utils/audioUtils';
 
 type FileStatus = {
   file: File;
@@ -10,6 +10,7 @@ type FileStatus = {
   transcription?: string;
   chunks?: number;
   currentChunk?: number;
+  duration?: number;
 };
 
 export default function HomePage() {
@@ -18,19 +19,41 @@ export default function HomePage() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       const selectedFiles = Array.from(event.target.files);
-      const newFiles: FileStatus[] = selectedFiles
-        .filter(file => file.size <= 100 * 1024 * 1024)
-        .map(file => ({ file, status: 'pending' }));
+      const newFiles: FileStatus[] = [];
+      
+      for (const file of selectedFiles) {
+        if (file.size <= 100 * 1024 * 1024) {
+          try {
+            const duration = await getAudioDuration(file);
+            newFiles.push({ file, status: 'pending', duration });
+          } catch (error) {
+            console.error('Error getting duration for file:', file.name, error);
+            newFiles.push({ file, status: 'pending' });
+          }
+        }
+      }
+      
       setFiles(prevFiles => [...prevFiles, ...newFiles]);
       
-      // Check for large files and show warning
-      const largeFiles = selectedFiles.filter(file => shouldSplitFile(file, 25));
-      if (largeFiles.length > 0) {
-        const fileNames = largeFiles.map(f => f.name).join(', ');
-        alert(`Warning: The following files are large and will be automatically split into smaller chunks: ${fileNames}\n\nThis will improve reliability and prevent timeouts.`);
+      // Check for long files and show warning
+      const longFiles = [];
+      for (const file of selectedFiles) {
+        try {
+          const needsSplitting = await shouldSplitFileByDuration(file, 3);
+          if (needsSplitting) {
+            longFiles.push(file.name);
+          }
+        } catch (error) {
+          console.error('Error checking duration for file:', file.name, error);
+        }
+      }
+      
+      if (longFiles.length > 0) {
+        const fileNames = longFiles.join(', ');
+        alert(`Note: The following files are longer than 3 minutes and will be automatically split into smaller chunks: ${fileNames}\n\nThis will improve reliability and prevent timeouts.`);
       }
     }
   };
@@ -76,12 +99,14 @@ export default function HomePage() {
       updateFileStatus(i, 'transcribing');
 
       try {
-        // Check if file needs to be split
-        if (shouldSplitFile(file, 25)) {
-          console.log(`Splitting large file: ${file.name}`);
+        // Check if file needs to be split based on duration
+        const needsSplitting = await shouldSplitFileByDuration(file, 3);
+        
+        if (needsSplitting) {
+          console.log(`Splitting long file: ${file.name} (${Math.round((files[i].duration || 0) / 1000 / 60)} minutes)`);
           
-          // Split the audio file into chunks
-          const chunks = await splitAudioFile(file, 10 * 60 * 1000); // 10 minutes per chunk
+          // Split the audio file into 3-minute chunks
+          const chunks = await splitAudioFile(file, 3 * 60 * 1000); // 3 minutes per chunk
           updateFileStatus(i, 'transcribing', undefined, chunks.length, 0);
           
           const transcriptions: TranscriptionResult[] = [];
@@ -112,7 +137,7 @@ export default function HomePage() {
           console.log(`Successfully transcribed ${file.name} in ${chunks.length} chunks`);
           
         } else {
-          // Regular transcription for smaller files
+          // Regular transcription for shorter files
           const transcription = await transcribeChunk({ blob: file, startTime: 0, endTime: 0, index: 0 }, apiKey);
           updateFileStatus(i, 'completed', transcription);
         }
@@ -122,13 +147,13 @@ export default function HomePage() {
         updateFileStatus(i, 'failed');
         
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-          alert(`Transcription timed out for ${file.name}. Please try with a smaller file or split it into chunks.`);
+          alert(`Transcription timed out for ${file.name}. Please try with a shorter file or split it into chunks.`);
         } else if (error.response && error.response.status === 401) {
           alert('Invalid ElevenLabs API key.');
         } else if (error.response && error.response.status === 413) {
           alert(`File ${file.name} is too large for processing. Please use a smaller file.`);
         } else if (error.response && error.response.status === 408) {
-          alert(`Transcription timed out for ${file.name}. Please try with a smaller file.`);
+          alert(`Transcription timed out for ${file.name}. Please try with a shorter file.`);
         } else {
           alert(`Error transcribing ${file.name}: ${error.response?.data?.error || error.message}`);
         }
@@ -235,8 +260,8 @@ export default function HomePage() {
                     <div className="text-sm font-medium truncate">{fileStatus.file.name}</div>
                     <div className="text-xs text-gray-500">
                       {formatFileSize(fileStatus.file.size)}
-                      {shouldSplitFile(fileStatus.file, 25) && (
-                        <span className="ml-2 text-orange-500">⚠️ Large file</span>
+                      {fileStatus.duration && fileStatus.duration > 3 * 60 * 1000 && (
+                        <span className="ml-2 text-orange-500">⚠️ Long file ({Math.round(fileStatus.duration / 1000 / 60)}min)</span>
                       )}
                     </div>
                   </div>

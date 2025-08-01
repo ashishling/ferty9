@@ -15,14 +15,55 @@ export interface TranscriptionResult {
 }
 
 /**
+ * Get audio duration in milliseconds
+ * @param file - The audio file to check
+ * @returns Promise<number> - Duration in milliseconds
+ */
+export async function getAudioDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    const url = URL.createObjectURL(file);
+    
+    audio.addEventListener('loadedmetadata', () => {
+      URL.revokeObjectURL(url);
+      resolve(audio.duration * 1000); // Convert to milliseconds
+    });
+    
+    audio.addEventListener('error', () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load audio file'));
+    });
+    
+    audio.src = url;
+  });
+}
+
+/**
+ * Check if a file needs to be split based on duration
+ * @param file - The audio file to check
+ * @param maxDurationMinutes - Maximum duration in minutes before splitting (default: 3)
+ * @returns Promise<boolean> - Whether the file needs splitting
+ */
+export async function shouldSplitFileByDuration(file: File, maxDurationMinutes: number = 3): Promise<boolean> {
+  try {
+    const durationMs = await getAudioDuration(file);
+    return durationMs > maxDurationMinutes * 60 * 1000;
+  } catch (error) {
+    console.error('Error checking audio duration:', error);
+    // If we can't determine duration, assume it needs splitting if it's large
+    return file.size > 10 * 1024 * 1024; // 10MB fallback
+  }
+}
+
+/**
  * Split an audio file into smaller chunks for processing
  * @param file - The audio file to split
- * @param chunkDurationMs - Duration of each chunk in milliseconds (default: 10 minutes)
+ * @param chunkDurationMs - Duration of each chunk in milliseconds (default: 3 minutes)
  * @returns Promise<AudioChunk[]> - Array of audio chunks
  */
 export async function splitAudioFile(
   file: File, 
-  chunkDurationMs: number = 10 * 60 * 1000 // 10 minutes
+  chunkDurationMs: number = 3 * 60 * 1000 // 3 minutes
 ): Promise<AudioChunk[]> {
   return new Promise((resolve, reject) => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -144,7 +185,7 @@ export function mergeTranscriptions(results: TranscriptionResult[]): string {
 }
 
 /**
- * Check if a file is too large and needs splitting
+ * Check if a file is too large and needs splitting (legacy function)
  */
 export function shouldSplitFile(file: File, maxSizeMB: number = 25): boolean {
   return file.size > maxSizeMB * 1024 * 1024;
