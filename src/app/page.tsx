@@ -2,12 +2,14 @@
 
 import { useState, useRef, ChangeEvent } from 'react';
 import axios from 'axios';
-import { shouldSplitFile, formatFileSize } from '../utils/audioUtils';
+import { shouldSplitFile, formatFileSize, splitAudioFile, mergeTranscriptions, AudioChunk, TranscriptionResult } from '../utils/audioUtils';
 
 type FileStatus = {
   file: File;
   status: 'pending' | 'transcribing' | 'completed' | 'failed';
   transcription?: string;
+  chunks?: number;
+  currentChunk?: number;
 };
 
 export default function HomePage() {
@@ -28,17 +30,35 @@ export default function HomePage() {
       const largeFiles = selectedFiles.filter(file => shouldSplitFile(file, 25));
       if (largeFiles.length > 0) {
         const fileNames = largeFiles.map(f => f.name).join(', ');
-        alert(`Warning: The following files are large and may timeout: ${fileNames}\n\nConsider splitting them into smaller chunks for better reliability.`);
+        alert(`Warning: The following files are large and will be automatically split into smaller chunks: ${fileNames}\n\nThis will improve reliability and prevent timeouts.`);
       }
     }
   };
 
-  const updateFileStatus = (index: number, status: FileStatus['status'], transcription?: string) => {
+  const updateFileStatus = (index: number, status: FileStatus['status'], transcription?: string, chunks?: number, currentChunk?: number) => {
     setFiles(prevFiles => {
       const newFiles = [...prevFiles];
-      newFiles[index] = { ...newFiles[index], status, transcription };
+      newFiles[index] = { ...newFiles[index], status, transcription, chunks, currentChunk };
       return newFiles;
     });
+  };
+
+  const transcribeChunk = async (chunk: AudioChunk, apiKey: string): Promise<string> => {
+    // Convert AudioChunk blob to File object
+    const chunkFile = new File([chunk.blob], `chunk_${chunk.index}.wav`, { type: 'audio/wav' });
+    
+    const formData = new FormData();
+    formData.append('file', chunkFile);
+    formData.append('apiKey', apiKey);
+
+    const response = await axios.post('/api/transcribe', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 300000, // 5 minutes timeout
+    });
+
+    return response.data.transcription;
   };
 
   const handleTranscribe = async () => {
@@ -52,34 +72,65 @@ export default function HomePage() {
     for (let i = 0; i < files.length; i++) {
       if (files[i].status === 'completed') continue;
 
+      const file = files[i].file;
       updateFileStatus(i, 'transcribing');
-      
-      const formData = new FormData();
-      formData.append('file', files[i].file);
-      formData.append('apiKey', apiKey);
 
       try {
-        const response = await axios.post('/api/transcribe', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 300000, // 5 minutes timeout
-        });
-        updateFileStatus(i, 'completed', response.data.transcription);
+        // Check if file needs to be split
+        if (shouldSplitFile(file, 25)) {
+          console.log(`Splitting large file: ${file.name}`);
+          
+          // Split the audio file into chunks
+          const chunks = await splitAudioFile(file, 10 * 60 * 1000); // 10 minutes per chunk
+          updateFileStatus(i, 'transcribing', undefined, chunks.length, 0);
+          
+          const transcriptions: TranscriptionResult[] = [];
+          
+          // Transcribe each chunk
+          for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+            updateFileStatus(i, 'transcribing', undefined, chunks.length, chunkIndex + 1);
+            
+            try {
+              const transcription = await transcribeChunk(chunks[chunkIndex], apiKey);
+              transcriptions.push({
+                text: transcription,
+                startTime: chunks[chunkIndex].startTime,
+                endTime: chunks[chunkIndex].endTime,
+                index: chunks[chunkIndex].index
+              });
+              console.log(`Completed chunk ${chunkIndex + 1}/${chunks.length} for ${file.name}`);
+            } catch (error: any) {
+              console.error(`Error transcribing chunk ${chunkIndex + 1} of ${file.name}:`, error);
+              throw error; // Re-throw to handle in outer catch
+            }
+          }
+          
+          // Merge all transcriptions
+          const mergedTranscription = mergeTranscriptions(transcriptions);
+          
+          updateFileStatus(i, 'completed', mergedTranscription);
+          console.log(`Successfully transcribed ${file.name} in ${chunks.length} chunks`);
+          
+        } else {
+          // Regular transcription for smaller files
+          const transcription = await transcribeChunk({ blob: file, startTime: 0, endTime: 0, index: 0 }, apiKey);
+          updateFileStatus(i, 'completed', transcription);
+        }
+        
       } catch (error: any) {
-        console.error('Error transcribing file:', files[i].file.name, error);
+        console.error('Error transcribing file:', file.name, error);
         updateFileStatus(i, 'failed');
         
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-          alert(`Transcription timed out for ${files[i].file.name}. This file may be too large. Please try with a smaller file or split it into chunks.`);
+          alert(`Transcription timed out for ${file.name}. Please try with a smaller file or split it into chunks.`);
         } else if (error.response && error.response.status === 401) {
           alert('Invalid ElevenLabs API key.');
         } else if (error.response && error.response.status === 413) {
-          alert(`File ${files[i].file.name} is too large for processing. Please use a smaller file.`);
+          alert(`File ${file.name} is too large for processing. Please use a smaller file.`);
         } else if (error.response && error.response.status === 408) {
-          alert(`Transcription timed out for ${files[i].file.name}. Please try with a smaller file.`);
+          alert(`Transcription timed out for ${file.name}. Please try with a smaller file.`);
         } else {
-          alert(`Error transcribing ${files[i].file.name}: ${error.response?.data?.error || error.message}`);
+          alert(`Error transcribing ${file.name}: ${error.response?.data?.error || error.message}`);
         }
       }
     }
@@ -197,7 +248,11 @@ export default function HomePage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Processing
+                      {fileStatus.chunks && fileStatus.currentChunk ? (
+                        `Chunk ${fileStatus.currentChunk}/${fileStatus.chunks}`
+                      ) : (
+                        'Processing'
+                      )}
                     </div>
                   )}
                   {fileStatus.status === 'completed' && (
