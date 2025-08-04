@@ -19,6 +19,7 @@ export default function HomePage() {
   const [files, setFiles] = useState<FileStatus[]>([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const [useBackgroundFunction, setUseBackgroundFunction] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -65,11 +66,13 @@ export default function HomePage() {
     formData.append('file', chunkFile);
     formData.append('apiKey', apiKey);
 
-    const response = await axios.post('/api/transcribe', formData, {
+    const endpoint = useBackgroundFunction ? '/api/transcribe-background' : '/api/transcribe';
+    
+    const response = await axios.post(endpoint, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 300000, // 5 minutes timeout
+      timeout: useBackgroundFunction ? 900000 : 300000, // 15 min for background, 5 min for regular
     });
 
     return response.data.transcription;
@@ -243,6 +246,19 @@ export default function HomePage() {
             placeholder="Enter your ElevenLabs API key"
             className="modern-input w-full"
           />
+          
+          {/* Function Type Toggle */}
+          <div className="mt-4 flex items-center space-x-2">
+            <label className="flex items-center space-x-2 text-sm">
+              <input
+                type="checkbox"
+                checked={useBackgroundFunction}
+                onChange={(e) => setUseBackgroundFunction(e.target.checked)}
+                className="rounded"
+              />
+              <span>Use Background Function (15 min timeout)</span>
+            </label>
+          </div>
         </div>
 
         <div className="modern-card p-6">
