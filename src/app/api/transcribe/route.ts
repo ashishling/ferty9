@@ -27,7 +27,10 @@ export async function POST(req: NextRequest) {
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
     const formData = new FormData();
-    formData.append('file', fileBuffer, file.name);
+    formData.append('file', fileBuffer, {
+      filename: file.name,
+      contentType: file.type
+    });
     formData.append('model_id', 'scribe_v1');
 
     const headers = {

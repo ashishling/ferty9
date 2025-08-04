@@ -96,8 +96,8 @@ export default function HomePage() {
         if (needsSplitting) {
           console.log(`Splitting long file: ${file.name} (${Math.round((files[i].duration || 0) / 1000 / 60)} minutes)`);
           
-          // Split the audio file into 1-minute chunks for Netlify compatibility
-          const chunks = await splitAudioFile(file, 1 * 60 * 1000); // 1 minute per chunk
+          // Split the audio file into 30-second chunks for Netlify compatibility
+          const chunks = await splitAudioFile(file, 30 * 1000); // 30 seconds per chunk
           updateFileStatus(i, 'transcribing', undefined, chunks.length, 0);
           
           const transcriptions: TranscriptionResult[] = [];
