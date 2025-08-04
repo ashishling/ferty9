@@ -28,6 +28,11 @@ export default function HomePage() {
       
       for (const file of selectedFiles) {
         if (file.size <= 100 * 1024 * 1024) {
+          // Warn about very large files that might timeout
+          if (file.size > 50 * 1024 * 1024) {
+            alert(`Warning: ${file.name} is very large (${formatFileSize(file.size)}). This may timeout on the server. Consider using a smaller file.`);
+          }
+          
           try {
             const duration = await getAudioDuration(file);
             const audioUrl = URL.createObjectURL(file);

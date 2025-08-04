@@ -2,5 +2,13 @@
   command = "npm run build"
   publish = ".next"
 
+[functions]
+  directory = ".next/serverless"
+  node_bundler = "esbuild"
+
+[functions."api-transcribe"]
+  timeout = 600
+  max_body_size = "100mb"
+
 [build.environment]
   NODE_VERSION = "18" 
