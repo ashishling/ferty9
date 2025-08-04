@@ -91,20 +91,13 @@ export default function HomePage() {
 
       try {
         // Check if file needs to be split based on duration
-        const needsSplitting = await shouldSplitFileByDuration(file, 2.67);
+        const needsSplitting = await shouldSplitFileByDuration(file, 1); // Split files longer than 1 minute for Netlify
         
         if (needsSplitting) {
-          console.log(`File is long but skipping splitting for now: ${file.name} (${Math.round((files[i].duration || 0) / 1000 / 60)} minutes)`);
+          console.log(`Splitting long file: ${file.name} (${Math.round((files[i].duration || 0) / 1000 / 60)} minutes)`);
           
-          // TEMPORARY: Skip splitting and send original file
-          // This will help us determine if the issue is with WAV conversion
-          const transcription = await transcribeChunk({ blob: file, startTime: 0, endTime: 0, index: 0 }, apiKey);
-          updateFileStatus(i, 'completed', transcription);
-          
-          // TODO: Re-enable splitting once we fix the WAV conversion issue
-          /*
-          // Split the audio file into 2-minute 40-second chunks
-          const chunks = await splitAudioFile(file, 2.67 * 60 * 1000); // 2 minutes 40 seconds per chunk
+          // Split the audio file into 1-minute chunks for Netlify compatibility
+          const chunks = await splitAudioFile(file, 1 * 60 * 1000); // 1 minute per chunk
           updateFileStatus(i, 'transcribing', undefined, chunks.length, 0);
           
           const transcriptions: TranscriptionResult[] = [];
@@ -139,7 +132,6 @@ export default function HomePage() {
           
           updateFileStatus(i, 'completed', mergedTranscription);
           console.log(`Successfully transcribed ${file.name} in ${chunks.length} chunks`);
-          */
           
         } else {
           // Regular transcription for shorter files
@@ -289,7 +281,7 @@ export default function HomePage() {
                     <div className="text-sm font-medium truncate">{fileStatus.file.name}</div>
                     <div className="text-xs text-gray-500">
                       {formatFileSize(fileStatus.file.size)}
-                      {fileStatus.duration && fileStatus.duration > 2.67 * 60 * 1000 && (
+                      {fileStatus.duration && fileStatus.duration > 1 * 60 * 1000 && (
                         <span className="ml-2 text-orange-500">⚠️ Long file ({Math.round(fileStatus.duration / 1000 / 60)}min)</span>
                       )}
                     </div>
