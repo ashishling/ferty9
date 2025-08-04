@@ -129,6 +129,59 @@ export async function splitAudioFile(
 }
 
 /**
+ * Split audio file by duration without format conversion (preserves original format)
+ * This is a simpler approach that might be more compatible with ElevenLabs
+ */
+export async function splitAudioFileSimple(
+  file: File, 
+  chunkDurationMs: number = 2.67 * 60 * 1000 // 2 minutes 40 seconds
+): Promise<AudioChunk[]> {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    const url = URL.createObjectURL(file);
+    
+    audio.addEventListener('loadedmetadata', async () => {
+      try {
+        const durationMs = audio.duration * 1000;
+        URL.revokeObjectURL(url);
+        
+        const chunks: AudioChunk[] = [];
+        let currentTime = 0;
+        let chunkIndex = 0;
+
+        while (currentTime < durationMs) {
+          const endTime = Math.min(currentTime + chunkDurationMs, durationMs);
+          
+          // For now, we'll use the original file for each chunk
+          // This is a temporary solution - in a real implementation, you'd need
+          // a server-side audio splitting library or use a different approach
+          chunks.push({
+            blob: file.slice(0, file.size), // Use original file for now
+            startTime: currentTime,
+            endTime: endTime,
+            index: chunkIndex
+          });
+
+          currentTime = endTime;
+          chunkIndex++;
+        }
+
+        resolve(chunks);
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    audio.addEventListener('error', () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load audio file'));
+    });
+
+    audio.src = url;
+  });
+}
+
+/**
  * Convert AudioBuffer to Blob
  */
 async function audioBufferToBlob(audioBuffer: AudioBuffer, mimeType: string): Promise<Blob> {
