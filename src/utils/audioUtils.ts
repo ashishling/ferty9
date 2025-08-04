@@ -171,7 +171,8 @@ async function audioBufferToBlob(audioBuffer: AudioBuffer, mimeType: string): Pr
     }
   }
   
-  return new Blob([buffer], { type: mimeType });
+  // Always use audio/wav since we're creating WAV files
+  return new Blob([buffer], { type: 'audio/wav' });
 }
 
 /**

@@ -11,12 +11,14 @@ type FileStatus = {
   chunks?: number;
   currentChunk?: number;
   duration?: number;
+  audioUrl?: string;
 };
 
 export default function HomePage() {
   const [apiKey, setApiKey] = useState('');
   const [files, setFiles] = useState<FileStatus[]>([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -28,10 +30,12 @@ export default function HomePage() {
         if (file.size <= 100 * 1024 * 1024) {
           try {
             const duration = await getAudioDuration(file);
-            newFiles.push({ file, status: 'pending', duration });
+            const audioUrl = URL.createObjectURL(file);
+            newFiles.push({ file, status: 'pending', duration, audioUrl });
           } catch (error) {
             console.error('Error getting duration for file:', file.name, error);
-            newFiles.push({ file, status: 'pending' });
+            const audioUrl = URL.createObjectURL(file);
+            newFiles.push({ file, status: 'pending', audioUrl });
           }
         }
       }
@@ -108,6 +112,12 @@ export default function HomePage() {
               console.log(`Completed chunk ${chunkIndex + 1}/${chunks.length} for ${file.name}`);
             } catch (error: any) {
               console.error(`Error transcribing chunk ${chunkIndex + 1} of ${file.name}:`, error);
+              console.error('Error details:', {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                message: error.message
+              });
               throw error; // Re-throw to handle in outer catch
             }
           }
@@ -145,12 +155,26 @@ export default function HomePage() {
     setIsTranscribing(false);
   };
 
-  const openFileSelector = () => {
-    fileInputRef.current?.click();
+  const toggleAudioPlayback = (fileName: string, audioUrl: string) => {
+    if (playingAudio === fileName) {
+      setPlayingAudio(null);
+    } else {
+      setPlayingAudio(fileName);
+    }
   };
 
   const removeFile = (fileName: string) => {
-    setFiles(files.filter(f => f.file.name !== fileName));
+    setFiles(files => {
+      const fileToRemove = files.find(f => f.file.name === fileName);
+      if (fileToRemove?.audioUrl) {
+        URL.revokeObjectURL(fileToRemove.audioUrl);
+      }
+      return files.filter(f => f.file.name !== fileName);
+    });
+  };
+
+  const openFileSelector = () => {
+    fileInputRef.current?.click();
   };
 
   const downloadAllTranscriptions = () => {
@@ -249,6 +273,35 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  {/* Audio Player */}
+                  {fileStatus.audioUrl && (
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => toggleAudioPlayback(fileStatus.file.name, fileStatus.audioUrl!)}
+                        className="btn-secondary text-xs px-2 py-1 flex items-center"
+                        title={playingAudio === fileStatus.file.name ? "Pause" : "Play"}
+                      >
+                        {playingAudio === fileStatus.file.name ? (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-14 9V3z" />
+                          </svg>
+                        )}
+                      </button>
+                      {playingAudio === fileStatus.file.name && (
+                        <audio
+                          src={fileStatus.audioUrl}
+                          autoPlay
+                          onEnded={() => setPlayingAudio(null)}
+                          onError={() => setPlayingAudio(null)}
+                        />
+                      )}
+                    </div>
+                  )}
+                  
                   {fileStatus.status === 'transcribing' && (
                     <div className="status-badge bg-blue-100 text-blue-800">
                       <svg className="animate-spin w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24">
