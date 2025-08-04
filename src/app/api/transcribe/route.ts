@@ -53,6 +53,13 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Error transcribing audio:', error.response ? error.response.data : error.message);
+    console.error('Full server error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+      config: error.config
+    });
     
     // Handle specific error types
     if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
@@ -69,6 +76,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ 
         error: 'File too large for processing. Please use a smaller file or split your audio.' 
       }, { status: 413 });
+    }
+    
+    if (error.response && error.response.status === 400) {
+      const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Bad request';
+      return NextResponse.json({ 
+        error: `ElevenLabs API error: ${errorMessage}` 
+      }, { status: 400 });
     }
     
     return NextResponse.json({ 

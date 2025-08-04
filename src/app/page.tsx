@@ -144,6 +144,13 @@ export default function HomePage() {
         
       } catch (error: any) {
         console.error('Error transcribing file:', file.name, error);
+        console.error('Full error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message,
+          config: error.config
+        });
         updateFileStatus(i, 'failed');
         
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
@@ -154,6 +161,9 @@ export default function HomePage() {
           alert(`File ${file.name} is too large for processing. Please use a smaller file.`);
         } else if (error.response && error.response.status === 408) {
           alert(`Transcription timed out for ${file.name}. Please try with a shorter file.`);
+        } else if (error.response && error.response.status === 400) {
+          const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Bad request';
+          alert(`Error transcribing ${file.name}: ${errorMessage}`);
         } else {
           alert(`Error transcribing ${file.name}: ${error.response?.data?.error || error.message}`);
         }
